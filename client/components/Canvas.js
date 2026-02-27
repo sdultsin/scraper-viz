@@ -31,10 +31,10 @@ export class Canvas {
       alpha: 1,
       alphaDecay: 0.02,
       velocityDecay: 0.4,
-      centerForce: 0.01,
-      repelForce: 500,
-      linkDistance: 80,
-      linkStrength: 0.3,
+      centerForce: 0.005,
+      repelForce: 2500,
+      linkDistance: 120,
+      linkStrength: 0.15,
     };
 
     this.resize();
