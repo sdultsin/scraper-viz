@@ -8,8 +8,10 @@ class App {
   constructor() {
     this.ws = null;
     this.reconnectAttempts = 0;
-    this.maxReconnectAttempts = 20;
+    this.maxReconnectAttempts = 3;
     this.reconnectDelay = 1000;
+    this.demoMode = false;
+    this.demoInterval = null;
 
     // Initialize components
     this.canvas = new Canvas(document.getElementById('node-canvas'));
@@ -25,8 +27,16 @@ class App {
     this.statusDot = document.querySelector('.status-dot');
     this.statusText = document.querySelector('.status-text');
 
-    // Connect to WebSocket
-    this.connect();
+    // Check for demo mode in URL or if deployed (not localhost)
+    const isDeployed = !window.location.hostname.includes('localhost') &&
+                       !window.location.hostname.includes('127.0.0.1');
+    const urlParams = new URLSearchParams(window.location.search);
+
+    if (urlParams.has('demo') || isDeployed) {
+      this.startDemoMode();
+    } else {
+      this.connect();
+    }
 
     // Global functions for HTML onclick handlers
     window.toggleSection = this.toggleSection.bind(this);
@@ -72,7 +82,9 @@ class App {
       this.setConnectionStatus('pending', `Reconnecting in ${delay/1000}s...`);
       setTimeout(() => this.connect(), delay);
     } else {
-      this.setConnectionStatus('disconnected', 'Connection failed');
+      // Fall back to demo mode
+      console.log('WebSocket connection failed, starting demo mode');
+      this.startDemoMode();
     }
   }
 
@@ -225,6 +237,116 @@ class App {
     const button = document.getElementById('feed-toggle');
     button.textContent = `Auto-scroll: ${isEnabled ? 'ON' : 'OFF'}`;
     button.classList.toggle('paused', !isEnabled);
+  }
+
+  startDemoMode() {
+    this.demoMode = true;
+    this.setConnectionStatus('connected', 'Demo Mode');
+
+    const sources = ['fameswap', 'swapd', 'z2u'];
+    const searchTerms = [
+      'twitter ai account', 'tech influencer', 'crypto twitter',
+      'gaming channel', 'finance account', 'startup founder'
+    ];
+    const filterReasons = [
+      'blocked_category', 'low_niche_score', 'over_budget',
+      'wtb_title', 'service_content', 'too_few_followers'
+    ];
+    const handles = [
+      '@TechNewsDaily', '@AIStartupGuy', '@CryptoTrader99',
+      '@DevCommunity', '@StartupWeekly', '@CodeMaster',
+      '@DataScienceHub', '@MLEngineer', '@ProductHunter'
+    ];
+
+    let searchId = 0;
+    let workerId = 0;
+
+    // Spawn agents
+    sources.forEach((source, i) => {
+      setTimeout(() => {
+        this.handleEvent({
+          type: 'agent:spawn',
+          source,
+          timestamp: Date.now(),
+          data: { id: source, label: source.charAt(0).toUpperCase() + source.slice(1) }
+        });
+      }, i * 300);
+    });
+
+    // Main demo loop
+    setTimeout(() => {
+      this.demoInterval = setInterval(() => {
+        const source = sources[Math.floor(Math.random() * sources.length)];
+        const rand = Math.random();
+
+        if (rand < 0.15) {
+          // Spawn worker
+          const id = `worker-${workerId++}`;
+          this.handleEvent({
+            type: 'worker:spawn',
+            source,
+            timestamp: Date.now(),
+            data: { id, label: `Page ${Math.floor(Math.random() * 10) + 1}`, parentId: source }
+          });
+        } else if (rand < 0.25) {
+          // Start search
+          const id = `search-${searchId++}`;
+          const term = searchTerms[Math.floor(Math.random() * searchTerms.length)];
+          this.handleEvent({
+            type: 'search:start',
+            source,
+            timestamp: Date.now(),
+            data: { id, label: term }
+          });
+          // Complete it after a delay
+          setTimeout(() => {
+            this.handleEvent({
+              type: 'search:complete',
+              source,
+              timestamp: Date.now(),
+              data: { id }
+            });
+          }, 2000 + Math.random() * 3000);
+        } else if (rand < 0.5) {
+          // Found listing
+          this.handleEvent({
+            type: 'listing:found',
+            source,
+            timestamp: Date.now(),
+            data: { listing: { title: handles[Math.floor(Math.random() * handles.length)] } }
+          });
+        } else if (rand < 0.85) {
+          // Filtered listing
+          this.handleEvent({
+            type: 'listing:filtered',
+            source,
+            timestamp: Date.now(),
+            data: { reason: filterReasons[Math.floor(Math.random() * filterReasons.length)] }
+          });
+        } else {
+          // Matched listing!
+          const handle = handles[Math.floor(Math.random() * handles.length)];
+          const followers = Math.floor(Math.random() * 50000) + 500;
+          const price = Math.floor(Math.random() * 500) + 50;
+          this.handleEvent({
+            type: 'listing:matched',
+            source,
+            timestamp: Date.now(),
+            data: {
+              listing: { handle, title: handle, followers, price }
+            }
+          });
+        }
+      }, 400 + Math.random() * 600);
+    }, 1000);
+  }
+
+  stopDemoMode() {
+    if (this.demoInterval) {
+      clearInterval(this.demoInterval);
+      this.demoInterval = null;
+    }
+    this.demoMode = false;
   }
 }
 
