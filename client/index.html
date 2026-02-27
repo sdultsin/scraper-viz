@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scraper Mission Control</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="header-left">
+        <div class="logo">
+          <span class="logo-icon"></span>
+          <span class="logo-text">Scraper Mission Control</span>
+        </div>
+        <div class="connection-status" id="connection-status">
+          <span class="status-dot"></span>
+          <span class="status-text">Connecting...</span>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="session-timer" id="session-timer">00:00:00</div>
+      </div>
+    </header>
+
+    <main class="main">
+      <section class="canvas-container" id="canvas-container">
+        <canvas id="node-canvas"></canvas>
+        <div class="canvas-overlay" id="canvas-overlay"></div>
+      </section>
+
+      <aside class="dashboard" id="dashboard">
+        <div class="dashboard-section">
+          <div class="progress-ring-container">
+            <svg class="progress-ring" viewBox="0 0 120 120">
+              <circle class="progress-ring-bg" cx="60" cy="60" r="52"/>
+              <circle class="progress-ring-fill" id="progress-ring-fill" cx="60" cy="60" r="52"/>
+            </svg>
+            <div class="progress-center">
+              <span class="progress-value" id="progress-value">0%</span>
+              <span class="progress-label" id="progress-label">0 of 0 searches</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="dashboard-section">
+          <h3 class="section-title">Listings</h3>
+          <div class="stats-grid">
+            <div class="stat-item">
+              <span class="stat-label">Found</span>
+              <span class="stat-value" id="stat-found">0</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Filtered</span>
+              <span class="stat-value stat-filtered" id="stat-filtered">0</span>
+            </div>
+            <div class="stat-item stat-highlight">
+              <span class="stat-label">Matched</span>
+              <span class="stat-value stat-matched" id="stat-matched">0</span>
+              <span class="stat-icon">★</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="dashboard-section">
+          <h3 class="section-title">By Source</h3>
+          <div class="source-bars" id="source-bars">
+            <div class="source-bar" data-source="fameswap">
+              <span class="source-name">FameSwap</span>
+              <div class="bar-track">
+                <div class="bar-fill" id="bar-fameswap"></div>
+              </div>
+              <span class="source-count" id="count-fameswap">0</span>
+            </div>
+            <div class="source-bar" data-source="swapd">
+              <span class="source-name">SWAPD</span>
+              <div class="bar-track">
+                <div class="bar-fill" id="bar-swapd"></div>
+              </div>
+              <span class="source-count" id="count-swapd">0</span>
+            </div>
+            <div class="source-bar" data-source="z2u">
+              <span class="source-name">Z2U</span>
+              <div class="bar-track">
+                <div class="bar-fill" id="bar-z2u"></div>
+              </div>
+              <span class="source-count" id="count-z2u">0</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="dashboard-section collapsible" id="filter-section">
+          <h3 class="section-title" onclick="toggleSection('filter-section')">
+            Filter Breakdown
+            <span class="collapse-icon">▼</span>
+          </h3>
+          <div class="section-content">
+            <div class="filter-list" id="filter-list"></div>
+          </div>
+        </div>
+
+        <div class="dashboard-section">
+          <h3 class="section-title">Recent Matches</h3>
+          <div class="matches-list" id="matches-list">
+            <div class="empty-state">No matches yet</div>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <footer class="event-feed" id="event-feed">
+      <div class="feed-header">
+        <span class="feed-title">Event Feed</span>
+        <button class="feed-toggle" id="feed-toggle" onclick="toggleAutoScroll()">
+          Auto-scroll: ON
+        </button>
+      </div>
+      <div class="feed-content" id="feed-content"></div>
+    </footer>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
