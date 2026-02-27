@@ -1,19 +1,26 @@
-// Canvas.js - Force-directed node graph visualization
+// Canvas.js - Hierarchical tree visualization
 
 const COLORS = {
   fameswap: '#6366f1',
   swapd: '#22d3ee',
   z2u: '#a855f7',
   orchestrator: '#ffffff',
-  line: 'rgba(255, 255, 255, 0.15)',
-  lineActive: 'rgba(255, 255, 255, 0.4)',
+  line: 'rgba(255, 255, 255, 0.2)',
+  lineActive: 'rgba(255, 255, 255, 0.5)',
 };
 
 const NODE_SIZES = {
   orchestrator: 28,
   agent: { width: 80, height: 32 },
-  worker: 16,
-  search: { height: 24, padding: 12 },
+  worker: 14,
+  search: { height: 20, padding: 10 },
+};
+
+const LAYOUT = {
+  topMargin: 60,
+  levelHeight: 90,
+  nodeSpacing: 50,
+  maxChildrenPerRow: 8,
 };
 
 export class Canvas {
@@ -26,17 +33,6 @@ export class Canvas {
     this.time = 0;
     this.particles = [];
 
-    // Force simulation parameters
-    this.simulation = {
-      alpha: 1,
-      alphaDecay: 0.02,
-      velocityDecay: 0.4,
-      centerForce: 0.005,
-      repelForce: 2500,
-      linkDistance: 120,
-      linkStrength: 0.15,
-    };
-
     this.resize();
     window.addEventListener('resize', () => this.resize());
 
@@ -45,11 +41,6 @@ export class Canvas {
       id: 'orchestrator',
       type: 'orchestrator',
       label: 'Orchestrator',
-      x: this.canvas.width / 2,
-      y: 60,
-      vx: 0,
-      vy: 0,
-      fixed: true,
     });
 
     this.animate();
@@ -65,6 +56,7 @@ export class Canvas {
     this.ctx.scale(dpr, dpr);
     this.width = container.clientWidth;
     this.height = container.clientHeight;
+    this.layoutTree();
   }
 
   addNode(nodeData) {
@@ -76,10 +68,10 @@ export class Canvas {
 
     const node = {
       ...nodeData,
-      x: nodeData.x ?? this.width / 2 + (Math.random() - 0.5) * 100,
-      y: nodeData.y ?? this.height / 2 + (Math.random() - 0.5) * 100,
-      vx: 0,
-      vy: 0,
+      x: this.width / 2,
+      y: LAYOUT.topMargin,
+      targetX: this.width / 2,
+      targetY: LAYOUT.topMargin,
       opacity: 0,
       scale: 0.8,
       status: 'active',
@@ -98,8 +90,8 @@ export class Canvas {
       });
     }
 
-    // Reset simulation
-    this.simulation.alpha = 1;
+    // Recalculate layout
+    this.layoutTree();
 
     return node;
   }
@@ -107,6 +99,7 @@ export class Canvas {
   removeNode(id) {
     this.nodes.delete(id);
     this.edges = this.edges.filter(e => e.source !== id && e.target !== id);
+    this.layoutTree();
   }
 
   updateNodeStatus(id, status) {
@@ -116,16 +109,98 @@ export class Canvas {
     }
   }
 
+  layoutTree() {
+    // Build parent-children map
+    const children = new Map();
+
+    for (const node of this.nodes.values()) {
+      const parentId = node.parentId || null;
+      if (!children.has(parentId)) {
+        children.set(parentId, []);
+      }
+      children.get(parentId).push(node);
+    }
+
+    // Position orchestrator at top center
+    const orchestrator = this.nodes.get('orchestrator');
+    if (orchestrator) {
+      orchestrator.targetX = this.width / 2;
+      orchestrator.targetY = LAYOUT.topMargin;
+    }
+
+    // Position agents (level 1)
+    const agents = children.get('orchestrator') || [];
+    this.positionChildrenInRow(agents, this.width / 2, LAYOUT.topMargin + LAYOUT.levelHeight);
+
+    // Position workers/searches under each agent (level 2+)
+    for (const agent of agents) {
+      const agentChildren = children.get(agent.id) || [];
+      if (agentChildren.length > 0) {
+        this.positionChildrenTree(agent, agentChildren, children);
+      }
+    }
+  }
+
+  positionChildrenInRow(nodes, centerX, y) {
+    if (nodes.length === 0) return;
+
+    const totalWidth = (nodes.length - 1) * LAYOUT.nodeSpacing * 2;
+    let startX = centerX - totalWidth / 2;
+
+    nodes.forEach((node, i) => {
+      node.targetX = startX + i * LAYOUT.nodeSpacing * 2;
+      node.targetY = y;
+    });
+  }
+
+  positionChildrenTree(parent, directChildren, allChildren) {
+    const baseY = parent.targetY + LAYOUT.levelHeight;
+
+    // Group children by source (for coloring consistency)
+    // Split into rows if too many
+    const rows = [];
+    let currentRow = [];
+
+    for (const child of directChildren) {
+      currentRow.push(child);
+      if (currentRow.length >= LAYOUT.maxChildrenPerRow) {
+        rows.push(currentRow);
+        currentRow = [];
+      }
+    }
+    if (currentRow.length > 0) {
+      rows.push(currentRow);
+    }
+
+    // Position each row
+    rows.forEach((row, rowIndex) => {
+      const rowY = baseY + rowIndex * (LAYOUT.levelHeight * 0.6);
+      const totalWidth = (row.length - 1) * LAYOUT.nodeSpacing;
+      const startX = parent.targetX - totalWidth / 2;
+
+      row.forEach((node, i) => {
+        node.targetX = startX + i * LAYOUT.nodeSpacing;
+        node.targetY = rowY;
+
+        // Position grandchildren
+        const grandchildren = allChildren.get(node.id) || [];
+        if (grandchildren.length > 0) {
+          this.positionChildrenTree(node, grandchildren, allChildren);
+        }
+      });
+    });
+  }
+
   spawnParticle(fromId, toId, type = 'data') {
     const from = this.nodes.get(fromId);
     const to = this.nodes.get(toId);
     if (!from || !to) return;
 
     this.particles.push({
-      x: from.x,
-      y: from.y,
-      targetX: to.x,
-      targetY: to.y,
+      x: from.targetX,
+      y: from.targetY,
+      targetX: to.targetX,
+      targetY: to.targetY,
       progress: 0,
       type,
       color: type === 'match' ? '#10b981' : COLORS[from.source] || '#ffffff',
@@ -133,7 +208,6 @@ export class Canvas {
     });
   }
 
-  // Burst particles from a node (for matches)
   burstParticles(nodeId, count = 8) {
     const node = this.nodes.get(nodeId);
     if (!node) return;
@@ -142,8 +216,8 @@ export class Canvas {
       const angle = (Math.PI * 2 * i) / count;
       const speed = 2 + Math.random() * 2;
       this.particles.push({
-        x: node.x,
-        y: node.y,
+        x: node.targetX,
+        y: node.targetY,
         vx: Math.cos(angle) * speed,
         vy: Math.sin(angle) * speed,
         life: 1,
@@ -154,70 +228,12 @@ export class Canvas {
     }
   }
 
-  runSimulation() {
-    if (this.simulation.alpha < 0.001) return;
-
-    const nodes = Array.from(this.nodes.values());
-
-    // Apply forces
-    for (const node of nodes) {
-      if (node.fixed) continue;
-
-      // Center force
-      node.vx += (this.width / 2 - node.x) * this.simulation.centerForce;
-      node.vy += (this.height / 3 - node.y) * this.simulation.centerForce * 0.5;
-
-      // Repulsion from other nodes
-      for (const other of nodes) {
-        if (other === node) continue;
-        const dx = node.x - other.x;
-        const dy = node.y - other.y;
-        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-        const force = this.simulation.repelForce / (dist * dist);
-        node.vx += (dx / dist) * force * this.simulation.alpha;
-        node.vy += (dy / dist) * force * this.simulation.alpha;
-      }
+  updatePositions() {
+    // Smoothly animate nodes to target positions
+    for (const node of this.nodes.values()) {
+      node.x += (node.targetX - node.x) * 0.15;
+      node.y += (node.targetY - node.y) * 0.15;
     }
-
-    // Link forces
-    for (const edge of this.edges) {
-      const source = this.nodes.get(edge.source);
-      const target = this.nodes.get(edge.target);
-      if (!source || !target) continue;
-
-      const dx = target.x - source.x;
-      const dy = target.y - source.y;
-      const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-      const diff = (dist - this.simulation.linkDistance) * this.simulation.linkStrength;
-
-      const fx = (dx / dist) * diff * this.simulation.alpha;
-      const fy = (dy / dist) * diff * this.simulation.alpha;
-
-      if (!source.fixed) {
-        source.vx += fx;
-        source.vy += fy;
-      }
-      if (!target.fixed) {
-        target.vx -= fx;
-        target.vy -= fy;
-      }
-    }
-
-    // Update positions
-    for (const node of nodes) {
-      if (node.fixed) continue;
-      node.vx *= this.simulation.velocityDecay;
-      node.vy *= this.simulation.velocityDecay;
-      node.x += node.vx;
-      node.y += node.vy;
-
-      // Boundary constraints
-      const margin = 50;
-      node.x = Math.max(margin, Math.min(this.width - margin, node.x));
-      node.y = Math.max(margin, Math.min(this.height - margin, node.y));
-    }
-
-    this.simulation.alpha *= (1 - this.simulation.alphaDecay);
   }
 
   updateParticles() {
@@ -225,7 +241,7 @@ export class Canvas {
       if (p.type === 'burst') {
         p.x += p.vx;
         p.y += p.vy;
-        p.vy += 0.1; // gravity
+        p.vy += 0.1;
         p.life -= 0.03;
         return p.life > 0;
       } else {
@@ -253,14 +269,15 @@ export class Canvas {
       ctx.strokeStyle = edge.active ? COLORS.lineActive : COLORS.line;
       ctx.lineWidth = 1.5;
       ctx.setLineDash([4, 4]);
-      edge.dashOffset -= edge.active ? 0.5 : 0.2;
+      edge.dashOffset -= edge.active ? 0.3 : 0.1;
       ctx.lineDashOffset = edge.dashOffset;
 
-      // Curved line
-      const midX = (source.x + target.x) / 2;
-      const midY = (source.y + target.y) / 2 - 20;
+      // Straight line down then curve to child
+      const midY = source.y + (target.y - source.y) * 0.5;
       ctx.moveTo(source.x, source.y);
-      ctx.quadraticCurveTo(midX, midY, target.x, target.y);
+      ctx.lineTo(source.x, midY);
+      ctx.lineTo(target.x, midY);
+      ctx.lineTo(target.x, target.y);
       ctx.stroke();
       ctx.setLineDash([]);
     }
@@ -275,8 +292,10 @@ export class Canvas {
       ctx.globalAlpha = 1;
     }
 
-    // Draw nodes
-    for (const node of this.nodes.values()) {
+    // Draw nodes (sorted by level so parents draw first)
+    const sortedNodes = Array.from(this.nodes.values()).sort((a, b) => a.y - b.y);
+
+    for (const node of sortedNodes) {
       // Animate spawn
       const age = Date.now() - node.spawnTime;
       node.opacity = Math.min(1, age / 300);
@@ -297,7 +316,7 @@ export class Canvas {
   drawNode(ctx, node) {
     const color = node.source ? COLORS[node.source] : COLORS.orchestrator;
     const isActive = node.status === 'active';
-    const pulse = isActive ? Math.sin(this.time * 3) * 0.1 + 1 : 1;
+    const pulse = isActive ? Math.sin(this.time * 3) * 0.05 + 1 : 1;
 
     if (node.type === 'orchestrator') {
       // Glow
@@ -330,7 +349,7 @@ export class Canvas {
       // Glow
       if (isActive) {
         ctx.shadowColor = color;
-        ctx.shadowBlur = 20;
+        ctx.shadowBlur = 15;
       }
 
       // Rounded rect
@@ -356,13 +375,13 @@ export class Canvas {
       // Glow
       if (isActive) {
         ctx.shadowColor = color;
-        ctx.shadowBlur = 12;
+        ctx.shadowBlur = 8;
       }
 
       // Circle
       ctx.beginPath();
       ctx.arc(0, 0, size * pulse, 0, Math.PI * 2);
-      ctx.fillStyle = color + '40';
+      ctx.fillStyle = color + '60';
       ctx.fill();
       ctx.strokeStyle = color;
       ctx.lineWidth = 1.5;
@@ -374,7 +393,7 @@ export class Canvas {
         ctx.fillStyle = '#94a3b8';
         ctx.font = '9px Inter';
         ctx.textAlign = 'center';
-        ctx.fillText(node.label.slice(0, 15), 0, size + 12);
+        ctx.fillText(node.label.slice(0, 12), 0, size + 12);
       }
     }
   }
@@ -392,7 +411,7 @@ export class Canvas {
   }
 
   animate() {
-    this.runSimulation();
+    this.updatePositions();
     this.updateParticles();
     this.draw();
     this.animationFrame = requestAnimationFrame(() => this.animate());
